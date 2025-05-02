@@ -383,7 +383,73 @@ def upload_local_file_to_s3(local_path: str, bucket_name: str, object_key: str):
      except Exception as e:
          print(f"워커: S3 업로드 오류: {e}")
          raise
+# backend/app/worker.py (부분 코드)
 
+import subprocess
+import sys # 에러 로깅에 필요
+
+# ... (다른 임포트 유지) ...
+
+def run_command(command: list, cwd: str = None, shell: bool = False, env: dict = None):
+    """
+    외부 명령어를 실행하고 표준 출력/에러를 반환합니다.
+    명령어 실행 실패 시 예외를 발생시킵니다.
+
+    :param command: 실행할 명령어와 인자들을 담은 문자열 리스트 (예: ['ls', '-l'])
+    :param cwd: 명령어를 실행할 현재 작업 디렉토리 경로
+    :param shell: 쉘을 통해 명령어 실행 여부 (보안상 False 권장, 문자열 명령 사용 시 True)
+    :param env: 명령어 실행 시 사용할 환경 변수 딕셔너리 (None 시 현재 환경 사용)
+    :return: 명령어 실행의 표준 출력 (문자열)
+    :raises FileNotFoundError: 실행 파일 경로를 찾을 수 없을 때
+    :raises RuntimeError: 명령어 실행 중 0이 아닌 종료 코드가 반환되거나 다른 오류 발생 시
+    """
+    command_str = " ".join(command) # 로깅을 위해 명령어 문자열 생성
+    print(f"워커: 외부 명령어 실행 시작: {command_str}")
+    if cwd:
+        print(f"워커: 실행 디렉토리: {cwd}")
+
+    try:
+        # subprocess.run: 명령어 실행, 완료까지 대기, 결과 반환
+        # capture_output=True: 표준 출력과 표준 에러를 캡처
+        # text=True: 캡처된 출력/에러를 텍스트로 디코딩 (기본 시스템 인코딩 사용)
+        # check=True: 명령어 실행 결과가 0이 아닌 종료 코드를 반환하면 CalledProcessError 예외 발생
+        # env: 자식 프로세스에 전달할 환경 변수 딕셔너리 (예: PATH, API 키 등)
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=True,
+            shell=shell,
+            env=env
+        )
+
+        print("워커: 명령어 실행 성공.")
+        if result.stdout:
+            print("워커: stdout:\n", result.stdout.strip()) # 공백 제거하고 출력
+        if result.stderr:
+            # 표준 에러에 경고나 정보가 담기는 경우도 있으므로 오류가 아니더라도 출력
+            print("워커: stderr:\n", result.stderr.strip())
+
+        return result.stdout # 표준 출력 반환
+
+    except FileNotFoundError:
+        print(f"워커: 오류: 명령어 실행 파일 '{command[0]}'를 찾을 수 없습니다.", file=sys.stderr) # 표준 에러로 출력
+        raise FileNotFoundError(f"Command not found: {command[0]}. Make sure it's installed and in your PATH.")
+    except subprocess.CalledProcessError as e:
+        # check=True 때문에 0이 아닌 종료 코드 시 이 예외 발생
+        error_output = e.stderr.strip() if e.stderr else "No stderr output."
+        print(f"워커: 명령어 실행 실패 (종료 코드 {e.returncode}):", file=sys.stderr)
+        print("워커: stdout:\n", e.stdout.strip(), file=sys.stderr)
+        print("워커: stderr:\n", error_output, file=sys.stderr)
+        # 더 구체적인 오류 메시지와 함께 RuntimeError 발생
+        raise RuntimeError(f"External command failed with exit code {e.returncode}. Error: {error_output}")
+    except Exception as e:
+        # 그 외 예상치 못한 예외 처리
+        print(f"워커: 예기치 않은 명령어 실행 오류: {e}", file=sys.stderr)
+        raise RuntimeError(f"An unexpected error occurred while running command: {e}")
+
+# ... (process_task 함수 및 다른 코드 유지) ...
 
 def process_task(task_payload: dict):
     """
@@ -455,13 +521,135 @@ def process_task(task_payload: dict):
 
         # --- 2. 처리 단계 실행 (processing_steps + analysis_tasks) ---
         # 모든 단계를 순서대로 실행합니다.
+        # backend/app/worker.py (process_task 함수 내부, Music21 관련 부분 상세화)
+
+# ... (앞부분 정의 유지) ...
+
+        # --- 2. 처리 단계 실행 ---
+        # ... (all_tasks 순회 루프 유지) ...
+
+            try:
+                if step_type == "extract_music_data":
+                    # ... (OMR 또는 MusicXML/MIDI 파싱 로직 유지) ...
+                    # Music21 converter.parse() 결과로 music_data_representation 변수에 Music21 Stream 객체가 할당됩니다.
+                    # 예: music_data_representation = converter.parse(input_path)
+
+
+                # --- Music21 객체 다루기 예시 (Music21 Stream 객체가 있다고 가정) ---
+                if isinstance(music_data_representation, stream.Stream):
+                    print("워커: Music21 Stream 객체 처리 시작...")
+
+                    # 1. 악보 전체 순회 및 기본 정보 접근
+                    # .flat: 복잡한 계층 구조를 무시하고 모든 요소를 평면적으로 가져옴
+                    # .recurse(): 중첩된 스트림을 포함하여 모든 요소를 재귀적으로 순회
+                    # for element in music_data_representation.flat:
+                    # for element in music_data_representation.recurse():
+                    #     print(f"  요소: {element.classes}, 오프셋: {element.offset}") # 요소의 클래스 타입과 시간적 위치 확인
+
+                    # 2. 특정 타입의 요소 찾기
+                    # .getElementsByClass(): 특정 클래스 타입의 요소들만 가져옴
+                    notes_and_chords = music_data_representation.flat.getElementsByClass(['Note', 'Chord'])
+                    print(f"워커: 추출된 음표 및 화음 개수: {len(notes_and_chords)}")
+
+                    lyrics = music_data_representation.flat.getElementsByClass('Lyric')
+                    print(f"워커: 추출된 가사 요소 개수: {len(lyrics)}")
+
+                    tempos = music_data_representation.flat.getElementsByClass('TempoIndication')
+                    print(f"워커: 추출된 빠르기말 개수: {len(tempos)}")
+
+                    # 마디(Measure) 단위로 접근
+                    # measures = music_data_representation.getElementsByClass('Measure')
+                    # print(f"워커: 악보의 마디 개수: {len(measures)}")
+                    # for measure in measures:
+                    #      print(f"  마디 {measure.number}의 요소 개수: {len(measure.elements)}")
+
+                    # 3. 음표 (Note) 객체 정보 접근
+                    # for nc in notes_and_chords:
+                    #     if isinstance(nc, note.Note):
+                    #         print(f"  음표: {nc.pitch.unicodeName} ({nc.pitch.frequency:.2f} Hz), 길이: {nc.duration.quarterLength} 사분음표 길이")
+                    #     elif isinstance(nc, chord.Chord):
+                    #         print(f"  화음: {nc.pitchedCommonNames}, 길이: {nc.duration.quarterLength} 사분음표 길이")
+                    #         # for p in nc.pitches: print(f"    - 음: {p.unicodeName}")
+
+                    # 4. 가사 (Lyric) 객체 정보 접근
+                    # extracted_text_content = "" # 번역 단계에서 사용될 텍스트
+                    # for ly in lyrics:
+                    #      print(f"  가사: {ly.text} (연번: {ly.number}, 원천: {ly. syllabic})")
+                    #      extracted_text_content += ly.text + "\n"
+
+
+                    # 5. 악보 변환 및 조작 (예시)
+                    # 조성(Key) 바꾸기 (조옮김 - Transpose)
+                    # original_key = music_data_representation.analyze('key') # 조성 분석
+                    # interval_to_transpose = interval.Interval('P4') # 완전 4도 위로 올리기
+                    # transposed_score = music_data_representation.transpose(interval_to_transpose)
+                    # print(f"워커: 악보를 {interval_to_transpose. अर्धfString}만큼 조옮김했습니다.")
+
+                    # 빠르기(Tempo) 바꾸기
+                    # for mt in music_data_representation.recurse().getElementsByClass('MetronomeMark'):
+                    #      mt.number = 120 # 모든 빠르기를 120으로 설정
+
+
+                    # 6. Music21 객체 -> MIDI 파일로 쓰기
+                    # music_data_representation.write('midi', fp=midi_output_path) # MIDI 파일 생성 코드 (generate_music_file 단계에서 사용)
+
+
+                    # 7. Music21 객체 -> MusicXML 파일로 쓰기 (디버깅이나 중간 결과 저장 시 유용)
+                    # music_data_representation.write('musicxml', fp="/tmp/parsed_score.musicxml")
+
+
+                    # 8. 간단한 음악 이론 분석 (music21 내장 기능)
+                    # chords = music_data_representation.flat.getElementsByClass('Chord')
+                    # for ch in chords:
+                    #      try:
+                    #          # 화음의 근음(Root), 형태(Quality) 분석
+                    #          root_pitch = ch.root()
+                    #          quality = ch.quality()
+                    #          print(f"  화음 ({ch.pitchedCommonNames}): 근음 {root_pitch.name}, 형태 {quality}")
+                    #      except:
+                    #          pass # 분석 불가능한 화음 건너뛰기
+
+
+                    print("워커: Music21 Stream 객체 처리 완료.")
+
+                # elif isinstance(music_data_representation, mido.MidiFile):
+                #     print("워커: Mido MidiFile 객체 처리 시작...")
+                #     # Mido 객체 다루는 코드 (MIDI 메시지 순회 등)
+                #     # for msg in music_data_representation.play(): # 메시지 재생
+                #     #     print(msg)
+                #     # Mido 객체 -> MIDI 파일 쓰기: music_data_representation.save(midi_output_path)
+                #     print("워커: Mido MidiFile 객체 처리 완료.")
+
+                # elif isinstance(music_data_representation, dict) and "format" in music_data_representation and music_data_representation["format"] == "MusicXML_JSON":
+                #     print("워커: OMR JSON 결과 처리 시작...")
+                #     # OMR JSON 결과 구조에 맞게 파싱하고 음악 데이터 추출 로직 구현
+                #     print("워커: OMR JSON 결과 처리 완료.")
+
+
+                # ... (OMR 또는 파싱 결과에 따른 music_data_representation 객체 처리 로직 추가) ...
+
+
+                # ... (extract_text_from_score 단계 유지 및 상세화) ...
+                # Music21 객체에서 추출된 extracted_text_content 변수를 translate_to_shakespearean 단계로 전달
+
+
+                # ... (translate_to_shakespearean 단계 유지 및 상세화) ...
+
+
+                # ... (generate_music_file 단계 유지 및 상세화) ...
+                # music_data_representation (Music21 또는 Mido 객체)에서 MIDI/MP3 파일 생성 로직 구현
+
+            # ... (나머지 단계 및 final/finally 블록 유지) ...
+
+# --- SQS 메시지 리스닝 및 처리 루프 유지 ---
+# ... start_sqs_worker 함수 등 ...
         all_tasks = processing_steps + analysis_tasks
 
         for step in all_tasks:
             step_type = step.get("type")
             print(f"워커: 작업 단계 '{step_type}' 실행 시도...")
             step_status = "processing" # 단계별 상태
-
+        
             try:
                 if step_type == "extract_music_data":
                     if downloaded_file_path:
@@ -1019,7 +1207,9 @@ def detect_language(text: str) -> str:
 # ... (process_task 함수의 다음 단계들 및 finally 블록 유지) ...
 
 # 이 루프 안에서 메시지를 받아 process_task 함수를 호출합니다.
-# ...    
+# ...   
+
+
     finally:
         # 작업 완료 또는 실패 후 임시 파일 정리
         if downloaded_file_path and os.path.exists(downloaded_file_path) and "/tmp/" in downloaded_file_path:
