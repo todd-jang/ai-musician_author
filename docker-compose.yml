@@ -27,3 +27,184 @@ services:
 
 volumes:
   db_data:
+
+
+# ai-architecture-template/docker-compose.yml
+
+version: '3.8'
+
+# Define networks (optional but good practice)
+networks:
+  app_network:
+    driver: bridge
+
+# Define volumes for data persistence
+volumes:
+  db_data:
+  # redis_data: # if Redis persists data (not needed for simple message broker)
+
+services:
+
+  # --- 1. Backend Service (FastAPI API) ---
+  backend:
+    build: ./backend # Build from the Dockerfile in the backend directory
+    # image: your-dockerhub-username/personal-data-assistant-backend:latest # Or use a pre-built image
+    container_name: backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload # Command to run FastAPI (remove --reload for prod)
+    ports:
+      - "8000:8000" # Map host port 8000 to container port 8000
+      # If using Traefik, ports mapping might be handled by Traefik labels instead
+    env_file: # Load environment variables from .env file
+      - .env
+    environment: # Override or add environment variables
+      # Example: Ensure BOTO3 looks for credentials correctly if not using IAM roles
+      # AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID} # Loaded from .env
+      # AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY} # Loaded from .env
+      # SQS_QUEUE_URL: ${SQS_QUEUE_URL} # If connecting directly to cloud SQS
+      # REDIS_HOST: redis # Connect to the redis service by its name
+      # REDIS_PORT: 6379
+    volumes:
+      - ./backend:/app # Mount backend code for live updates during development (--reload)
+                       # For production, remove this volume mount after building the image
+    depends_on: # Backend depends on database and message queue
+      db:
+        condition: service_healthy
+      redis: # If using a local redis queue
+        condition: service_healthy
+    networks:
+      - app_network
+    # Optional: Healthcheck for backend readiness
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8000/"] # Assuming a health check endpoint exists
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+
+  # --- 2. Worker Service (Background Processor) ---
+  worker:
+    build: ./backend # Build from the SAME Dockerfile as backend
+    # image: your-dockerhub-username/personal-data-assistant-worker:latest # Or a separate worker image
+    container_name: worker
+    # Command to run the worker script instead of the FastAPI server
+    # This depends on how your worker loop is implemented (e.g., script that polls a queue)
+    command: python -u app/worker.py # Or specify a function/listener call
+    # Example command for a script that listens to a queue:
+    # command: python -m app.worker_listener # Assuming you have a worker_listener script
+    env_file: # Load environment variables from .env file
+      - .env
+    environment: # Override or add environment variables
+      # OPENAI_API_KEY: ${OPENAI_API_KEY} # Loaded from .env
+      # AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID} # If worker needs AWS creds directly
+      # AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # SQS_QUEUE_URL: ${SQS_QUEUE_URL} # If connecting directly to cloud SQS
+      # REDIS_HOST: redis # Connect to the redis service by its name
+      # REDIS_PORT: 6379
+    volumes:
+      # Mount backend code for easy development testing of the worker
+      # For production, remove this volume mount
+      - ./backend:/app
+      # Optional: Mount a volume for temporary file storage if worker needs it
+      # - worker_tmp_data:/tmp # Use a named volume or host path
+    depends_on: # Worker depends on database and message queue
+      db:
+        condition: service_healthy
+      redis: # If using a local redis queue
+        condition: service_healthy
+    networks:
+      - app_network
+    # Optional: Resource limits for worker (can be high for AI tasks)
+    # resources:
+    #   limits:
+    #     cpus: '2.0'
+    #     memory: '4G'
+    #   reservations:
+    #     cpus: '0.5'
+    #     memory: '1G'
+    # Optional: If worker needs GPU access
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all # or specify a number
+    #           capabilities: [gpu]
+
+
+  # --- 3. Database Service (PostgreSQL) ---
+  db:
+    image: postgres:13 # Use a stable PostgreSQL image
+    container_name: db
+    env_file: # Load database credentials from .env
+      - .env
+    environment: # PostgreSQL specific environment variables (loaded from .env)
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data # Persistent data storage
+      # Optional: Mount init scripts if needed for initial setup
+      # - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432" # Optional: Map DB port for host access (e.g., for GUI tools)
+    networks:
+      - app_network
+    # Healthcheck to ensure DB is ready
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s # Give DB time to start initially
+
+
+  # --- 4. Message Queue (Redis - Simple example for local async) ---
+  redis:
+    image: redis:latest # Use the latest Redis image
+    container_name: redis
+    ports:
+      - "6379:6379" # Optional: Map Redis port for host access
+    networks:
+      - app_network
+    # Optional: Data persistence for Redis (needed if messages must survive container restart)
+    # volumes:
+    #   - redis_data:/data
+    # command: redis-server --appendonly yes # Enable AOF persistence
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+
+  # --- 5. Reverse Proxy / API Gateway (Traefik - Optional but good practice) ---
+  # Requires the traefik/ directory structure
+  # traefik:
+  #   image: traefik:v2.10 # Use a recent Traefik version
+  #   container_name: traefik
+  #   command:
+  #     - --api.insecure=true # Enable API dashboard (dev only)
+  #     - --providers.docker=true # Enable Docker provider
+  #     - --providers.docker.exposedbydefault=false # Only expose containers with traefik.enable=true label
+  #     - --entrypoints.web.address=:80 # Define entrypoint for HTTP
+  #     # - --entrypoints.websecure.address=:443 # Define entrypoint for HTTPS (requires cert config)
+  #     - --providers.file.directory=/etc/traefik/dynamic # Load dynamic config from file
+  #     - --providers.file.watch=true # Watch for dynamic config changes
+  #   ports:
+  #     - "80:80"   # Expose web entrypoint
+  #     # - "443:443" # Expose websecure entrypoint
+  #     - "8080:8080" # Expose API dashboard (dev only)
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro # Mount Docker socket for provider
+  #     - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro # Mount static config
+  #     - ./traefik/dynamic:/etc/traefik/dynamic:ro # Mount dynamic config directory
+  #   networks:
+  #     - app_network
+  #   depends_on:
+  #     - backend # Traefik needs backend to be running to route to it
+  #   # Traefik labels to route traffic to the backend service
+  #   # backend service would need labels like:
+  #   # labels:
+  #   #   - traefik.enable=true
+  #   #   - traefik.http.routers.backend.rule=Host(`localhost`) # Or your domain
+  #   #   - traefik.http.routers.backend.entrypoints=web
+  #   #   - traefik.http.services.backend.loadbalancer.server.port=8000
