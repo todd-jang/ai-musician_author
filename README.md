@@ -1,4 +1,9 @@
-ai-architecture-template/
+# Docker Compose로 서비스들을 빌드하고 실행합니다.
+# --build: Dockerfile이 변경되었거나 이미지가 없을 경우 다시 빌드합니다.
+# -d: 백그라운드에서 실행합니다.
+docker-compose up --build -d
+
+ai-1/
 ├── docker-compose.yml  # 로컬 개발 환경 오케스트레이션
 ├── .env                # 환경 변수 (AWS/OCI 자격 증명, 버킷 이름 등)
 ├── traefik/            # (선택) 로컬 또는 환경별 리버스 프록시 설정
