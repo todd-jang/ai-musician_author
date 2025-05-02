@@ -16,8 +16,8 @@ def read_root():
 
 # 이 파일을 직접 실행하려면:
 # uvicorn app.main:app --reload
-# (FastAPI 및 uvicorn 설치 필요: pip install fastapi uvicorn python-multipart boto3)
-
+# (FastAPI 및 uvicorn 설치 필요: pip install fastapi uvicorn python-multipart boto3) 가상환경에서 backend/에서 pip install -r requirements.txt
+웹 브라우저에서 http://127.0.0.1:8000/docs 로 접속하면 FastAPI의 자동 생성된 API 문서를 확인할 수 있습니다. /files/uploadfile/ 엔드포인트를 테스트해볼 수 있습니다.
 
 # backend/app/api/files.py
 
