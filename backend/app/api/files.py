@@ -100,3 +100,7 @@ async def create_upload_files(files: List[UploadFile] = File(...)):
          # 파일 객체는 사용 후 자동으로 닫히거나, 명시적으로 file.close()를 호출할 수 있습니다.
 
      return {"uploaded_files": uploaded_results}
+# 분석 작업 목록에 화성 분석 추가
+task_payload["analysis_tasks"].append({"type": "analyze_harmony"})
+# 필요하다면 형식 분석도 추가
+# task_payload["analysis_tasks"].append({"type": "analyze_form"})
