@@ -835,7 +835,191 @@ def process_task(task_payload: dict):
 
 
 # ... (process_task 함수의 다음 단계들 유지) ...
+# worker.py (translate_to_shakespearean 부분 상세화)
 
+# ... (앞부분 임포트 유지) ...
+
+# 셰익스피어 번역 관련 라이브러리 (LangChain, OpenAI) 및 설정 로드
+from langchain_openai import ChatOpenAI # gpt-3.5-turbo에 ChatOpenAI 사용 권장
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+from langchain.text_splitter import RecursiveCharacterTextSplitter # 긴 텍스트 분할에 더 유연
+# API 호출 재시도 라이브러리
+from tenacity import retry, stop_after_attempt, wait_exponential # pip install tenacity
+
+# .env에서 OpenAI API 키 로드는 위에 이미 있습니다.
+# os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+
+# LangChain LLM 인스턴스 생성 (이 부분은 함수 외부에 생성하여 재사용 가능)
+# 온도(temperature)는 창의성 조절. 0.7 정도면 스타일 변환에 적합
+try:
+    llm_shakespeare = ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-3.5-turbo"), temperature=0.7)
+    # 모델 이름은 환경 변수 등으로 관리하는 것이 좋음
+except Exception as e:
+    print(f"워커: OpenAI LLM 인스턴스 생성 오류: {e}")
+    llm_shakespeare = None # LLM 사용 불가 상태
+
+
+# 프롬프트 템플릿 정의 (셰익스피어 문체 가이드라인 강화)
+# {original_text} 변수에 번역할 텍스트가 들어갑니다.
+# 원본 언어 지정, 결과 형식 지정 등 추가 가이드라인 포함.
+SHAKESPEARE_PROMPT_TEMPLATE = """Translate the following text into English,
+and then rewrite the translated text in the style of William Shakespeare.
+Focus on using vocabulary, phrasing, and sentence structures common in the Elizabethan era.
+Maintain the original meaning and context as accurately as possible.
+
+Original Text (Language: {original_language}):
+"{original_text}"
+
+Shakespearean Style Translation:"""
+
+SHAKESPEARE_PROMPT = PromptTemplate(
+    input_variables=["original_text", "original_language"], # 원본 언어 변수 추가
+    template=SHAKESPEARE_PROMPT_TEMPLATE
+)
+
+# 긴 텍스트 분할 설정
+# 재귀적으로 분할 시도. chunk_size와 chunk_overlap 조정
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1500, # GPT-3.5-turbo 토큰 제한(약 4000)보다 작게 설정
+    chunk_overlap=100, # 청크 간 겹치는 부분 (문맥 유지를 도움)
+    length_function=len,
+    add_start_index=True, # 분할된 청크의 원본 텍스트 시작 위치 추가
+)
+
+
+# OpenAI API 호출에 대한 재시도 데코레이터
+# 3번 시도하고, 실패 시 지수적으로 대기 시간 증가 (최대 10초 대기)
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def call_llm_with_retry(prompt_text: str, llm_chain: LLMChain):
+    """LLM 체인을 호출하고 재시도 로직을 적용합니다."""
+    print(f"워커: LLM 호출 시도 (프롬프트 시작: {prompt_text[:100]}...)")
+    response = llm_chain.run(original_text=prompt_text) # 체인 실행
+    print("워커: LLM 호출 성공.")
+    return response
+
+
+# 텍스트 원본 언어 감지 함수 (langdetect 라이브러리 사용 예시)
+# pip install langdetect
+from langdetect import detect
+from langdetect.lang_detect_exception import LangDetectException
+
+def detect_language(text: str) -> str:
+    """텍스트의 원본 언어를 감지합니다."""
+    try:
+        # 텍스트가 너무 짧으면 감지 오류 발생 가능성 높음
+        if len(text) < 10: # 임의의 최소 길이 설정
+             return "unknown"
+        lang_code = detect(text)
+        return lang_code
+    except LangDetectException:
+        print("워커: 언어 감지 오류 발생.")
+        return "unknown"
+    except Exception as e:
+         print(f"워커: 예기치 않은 언어 감지 오류: {e}")
+         return "unknown"
+
+
+# ... (process_task 함수의 다운로드 및 추출 부분 유지) ...
+
+        elif step_type == "translate_to_shakespearean":
+            # 셰익스피어 문체 번역 (LangChain/GPT 사용)
+            extracted_text_content = processed_results.get("extracted_text_content") # 이전 단계에서 추출된 텍스트 사용
+
+            if not llm_shakespeare:
+                 print("워커: LLM 인스턴스가 없어 셰익스피어 문체 번역 불가. 단계 건너뜁니다.")
+                 step_status = "skipped"
+                 processed_results["shakespearean_translation"] = {"status": "skipped", "message": "LLM not initialized"}
+
+            elif extracted_text_content and extracted_text_content.strip():
+                print("워커: 셰익스피어 문체 번역 시작...")
+                translation_results = [] # 각 청크별 번역 결과를 저장할 리스트
+                step_status = "processing"
+
+                try:
+                    # 1. 원본 텍스트 언어 감지
+                    original_language = detect_language(extracted_text_content)
+                    print(f"워커: 감지된 원본 언어: {original_language}")
+                    processed_results["detected_language"] = original_language
+
+                    # 2. 긴 텍스트를 청크로 분할
+                    # LangChain의 create_documents는 파일 로더처럼 작동하지만, 여기서는 문자열을 직접 분할
+                    # text_splitter.create_documents([extracted_text_content]) # Document 객체 리스트 반환
+                    texts = text_splitter.split_text(extracted_text_content) # 문자열 리스트 반환
+                    print(f"워커: 원본 텍스트가 {len(texts)}개의 청크로 분할되었습니다.")
+
+
+                    # 3. 각 청크별로 LLM 호출 및 번역/변환 수행
+                    llm_chain = LLMChain(llm=llm_shakespeare, prompt=SHAKESPEARE_PROMPT)
+
+                    for i, chunk in enumerate(texts):
+                        print(f"워커: 청크 {i+1}/{len(texts)} 처리 시작...")
+                        try:
+                            # LLM 호출 (재시도 데코레이터 적용)
+                            shakespearean_text = call_llm_with_retry(
+                                prompt_text=chunk, # 청크 텍스트
+                                llm_chain=llm_chain # LLM 체인 인스턴스
+                            )
+
+                            translation_results.append({
+                                "chunk_index": i,
+                                "original_chunk": chunk,
+                                "translated_chunk": shakespearean_text.strip(),
+                                "status": "success"
+                            })
+                            print(f"워커: 청크 {i+1} 처리 완료.")
+
+                        except Exception as e:
+                            print(f"워커: 청크 {i+1} 처리 중 오류 발생: {e}")
+                            translation_results.append({
+                                "chunk_index": i,
+                                "original_chunk": chunk,
+                                "translated_chunk": None,
+                                "status": "failed",
+                                "error": str(e)
+                            })
+                            # 특정 청크 실패 시 전체 번역을 실패로 간주할지, 부분 결과만 사용할지 결정 필요
+
+                    # 4. 번역된 청크 결과 합치기
+                    # 간단히 번역된 청크들을 이어 붙이지만, 문맥상 자연스럽게 합치는 로직은 더 복잡할 수 있음.
+                    # 예시: '\n\n'.join([res['translated_chunk'] for res in translation_results if res['status'] == 'success'])
+                    # 여기서는 결과 목록 자체를 저장
+                    processed_results["shakespearean_translation"] = {
+                       "status": "completed", # 모든 청크 처리가 완료되면 completed
+                       "original_language": original_language,
+                       "chunks_processed": len(texts),
+                       "translation_results_per_chunk": translation_results # 각 청크별 결과 목록
+                       # 전체 합쳐진 번역 결과 문자열은 필요에 따라 추가 생성
+                       # "full_translated_text": "..."
+                    }
+                    print("워커: 셰익스피어 문체 번역 단계 처리 완료.")
+                    # 모든 청크가 성공했는지 확인하여 최종 단계 상태 결정
+                    if all(res['status'] == 'success' for res in translation_results):
+                         step_status = "success"
+                         processed_results["shakespearean_translation"]["status"] = "success"
+                    else:
+                         step_status = "completed_with_errors" # 일부 청크 실패
+                         processed_results["shakespearean_translation"]["status"] = "completed_with_errors"
+
+
+                except Exception as e:
+                    print(f"워커: 셰익스피어 문체 번역 단계 실행 중 오류 발생: {e}", exc_info=True)
+                    step_status = "failed"
+                    processed_results["shakespearean_translation"] = {"status": "failed", "error": str(e)}
+
+
+            else:
+                print("워커: 번역할 텍스트가 없거나 추출 단계 실패로 셰익스피어 문체 번역 건너뜁니다.")
+                step_status = "skipped"
+                processed_results["shakespearean_translation"] = {"status": "skipped", "message": "No text found or extracted for translation"}
+
+            # 단계별 최종 상태 기록
+            processed_results[f"{step_type}_status"] = step_status
+
+# ... (process_task 함수의 다음 단계들 및 finally 블록 유지) ...
+
+# 이 루프 안에서 메시지를 받아 process_task 함수를 호출합니다.
+# ...    
     finally:
         # 작업 완료 또는 실패 후 임시 파일 정리
         if downloaded_file_path and os.path.exists(downloaded_file_path) and "/tmp/" in downloaded_file_path:
