@@ -17,3 +17,7 @@ def read_root():
 # 이 파일을 직접 실행하려면:
 # uvicorn app.main:app --reload
 # (FastAPI 및 uvicorn 설치 필요: pip install fastapi uvicorn python-multipart boto3)
+
+
+
+
