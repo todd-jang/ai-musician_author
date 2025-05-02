@@ -432,3 +432,30 @@ aws_spot_service = AwsSpotService()
 #
 # # 특정 조건에서 워커 확장을 위해 Spot 인스턴스 추가 요청
 # # aws_spot_service.request_spot_instance({"instance_type": "c6g.xlarge", "target_capacity": 1})
+
+실행 확인:
+
+컨테이너 상태 확인:
+
+Bash
+
+docker ps
+실행 중인 컨테이너 목록(backend, worker, db, redis, (활성화했다면 traefik))이 보일 것입니다.
+
+컨테이너 로그 확인:
+각 컨테이너의 실행 로그를 확인하여 오류가 없는지, 정상적으로 시작되었는지 확인합니다.
+
+Bash
+
+docker logs backend
+docker logs worker
+docker logs db
+docker logs redis
+backend 로그에 "Application startup complete."와 같은 메시지가 보이면 정상입니다. worker 로그에는 SQS 큐 연결 시도 메시지나 예시 작업 처리 메시지 등이 나타날 수 있습니다. db 로그에는 PostgreSQL 시작 메시지가 보일 것입니다.
+
+백엔드 API 접속 테스트:
+웹 브라우저나 curl 명령어를 사용하여 백엔드 API에 접속해 봅니다.
+
+FastAPI 자동 문서: http://localhost:8000/docs 로 접속합니다. FastAPI가 제공하는 Swagger UI 기반의 API 문서를 볼 수 있습니다. /music/upload_sheetmusic/ 엔드포인트를 확인하고 테스트해 볼 수 있습니다.
+루트 엔드포인트: curl http://localhost:8000/ 명령 실행 시 {"message":"Personal Data Assistant Backend is running!"} 와 같은 응답이 오는지 확인합니다.
+파일 업로드 테스트: /music/upload_sheetmusic/ 엔드포인트에 악보 파일 (또는 아무 파일)을 업로드하는 테스트를 수행합니다.
