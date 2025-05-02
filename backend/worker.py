@@ -194,7 +194,104 @@ def process_task(task_payload: dict):
                         processed_results["shakespearean_translation"] = {"status": "skipped", "message": "No text found for translation"}
                         step_success = True
 
+                # backend/app/worker.py (process_task 함수 내부, 작업 단계 실행 루프 안)
 
+# ... (all_tasks 순회 루프 시작 및 기존 단계들 유지) ...
+
+        try:
+            # ... (기존 단계들: extract_music_data, extract_text_from_score, translate_to_shakespearean, generate_music_file 등) ...
+
+            elif step_type == "analyze_harmony":
+                # 화성 분석 로직 구현
+                if isinstance(music_data_representation, stream.Stream):
+                    print("워커: 화성 분석 시작 (Music21 예시)...")
+                    step_status = "processing"
+                    try:
+                        # Music21의 화성 분석 모듈 사용
+                        # analyze() 메소드는 Stream에 직접 적용하거나 analysis.harmony 모듈 사용
+                        # 예시: 화음 분석 결과를 Stream에 삽입
+                        # harmony_analyzer = analysis.harmony.HarmonicAnalysis(music_data_representation)
+                        # harmony_analyzer.analyze()
+                        # analysis_results_stream = harmony_analyzer.music21Object # 분석 결과가 포함된 Music21 Stream
+
+                        # 간단한 화음 리스트 추출 예시
+                        chords = music_data_representation.flat.getElementsByClass('Chord')
+                        harmony_list = []
+                        for ch in chords:
+                            try:
+                                # 화음의 근음과 형태 분석
+                                root_pitch = ch.root()
+                                quality = ch.quality()
+                                harmony_name = f"{root_pitch.name} {quality}"
+                                harmony_list.append({
+                                    "offset": ch.offset, # 악보 내 위치
+                                    "chord": ch.pitchedCommonNames, # 구성음 이름
+                                    "harmony": harmony_name # 분석된 화음 이름
+                                })
+                            except Exception as e:
+                                 # 분석 불가능한 화음 등 오류 처리
+                                 print(f"워커: 화음 분석 오류 발생: {e}")
+                                 harmony_list.append({
+                                      "offset": ch.offset,
+                                      "chord": ch.pitchedCommonNames,
+                                      "harmony": "Analysis Failed",
+                                      "error": str(e)
+                                 })
+
+
+                        print(f"워커: 화성 분석 완료. 총 {len(harmony_list)}개 화음 분석.")
+                        processed_results["harmony_analysis"] = {
+                            "status": "success",
+                            "results": harmony_list
+                        }
+                        step_status = "success"
+
+                    except Exception as e:
+                        print(f"워커: 화성 분석 중 오류 발생: {e}", exc_info=True)
+                        step_status = "failed"
+                        processed_results[f"{step_type}_error"] = str(e)
+
+                else:
+                    print("워커: Music21 Stream 객체가 없어 화성 분석 건너뜁니다.")
+                    step_status = "skipped"
+
+                processed_results[f"{step_type}_status"] = step_status
+
+            elif step_type == "analyze_form":
+                 # 형식 분석 로직 구현 (Music21 또는 다른 라이브러리 사용)
+                 if isinstance(music_data_representation, stream.Stream):
+                      print("워커: 형식 분석 시작 (Music21/다른 기법 예시)...")
+                      step_status = "processing"
+                      try:
+                           # Music21의 분석 모듈 또는 커스텀 로직 사용
+                           # 예: 반복 구조, 주제 악구 등을 찾는 로직
+                           # form_structure = analysis.form.FormAnalysis(music_data_representation).analyze()
+                           form_sections = [{"label": "A", "start": 0, "end": 16}, {"label": "B", "start": 16, "end": 32}] # Mock 결과
+
+                           print(f"워커: 형식 분석 완료 (예시). {len(form_sections)}개 섹션 식별.")
+                           processed_results["form_analysis"] = {
+                               "status": "success",
+                               "sections": form_sections
+                           }
+                           step_status = "success"
+
+                      except Exception as e:
+                           print(f"워커: 형식 분석 중 오류 발생: {e}", exc_info=True)
+                           step_status = "failed"
+                           processed_results[f"{step_type}_error"] = str(e)
+                 else:
+                      print("워커: Music21 Stream 객체가 없어 형식 분석 건너뜁니다.")
+                      step_status = "skipped"
+                 processed_results[f"{step_type}_status"] = step_status
+
+
+            # TODO: 대위법 분석 등 다른 분석 작업 타입 추가
+
+
+            # ... (나머지 단계 및 final/finally 블록 유지) ...
+
+# ... (process_task 함수의 반환 부분 유지) ...
+                
                 elif step_type == "generate_music_file":
                     output_format = step.get("output_format", "midi").lower()
                     if "music_data_extraction" in processed_results and music_data_representation:
