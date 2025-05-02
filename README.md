@@ -1,3 +1,45 @@
+ai-architecture-template/
+├── docker-compose.yml  # 로컬 개발 환경 오케스트레이션
+├── .env                # 환경 변수 (AWS/OCI 자격 증명, 버킷 이름 등)
+├── traefik/            # (선택) 로컬 또는 환경별 리버스 프록시 설정
+│   └── ...
+├── frontend/           # 프론트엔드 코드 (컨테이너화)
+│   └── ...
+├── backend/            # 백엔드 코드 (컨테이너화)
+│   └── app/
+│       ├── main.py
+│       ├── api/        # API 엔드포인트 정의
+│       │   └── files.py
+│       └── services/   # 외부 시스템 연동 코드 (하이브리드/멀티 클라우드 핵심)
+│           ├── __init__.py
+│           ├── s3_service.py    # AWS S3 연동
+│           ├── onprem.py        # 온프레미스 연동
+│           ├── lambda.py        # AWS Lambda 연동
+│           ├── oracle.py        # Oracle Cloud 연동
+│           └── aws_spot.py      # AWS Spot 워커 연동 (SQS 등)
+│   └── requirements.txt
+│   └── Dockerfile # 백엔드 컨테이너 빌드 파일
+├── db/                 # 데이터베이스 설정 (컨테이너화)
+│   └── ...
+│   └── Dockerfile
+├── infrastructure/     # 인프라스트럭처 관리
+│   └── terraform/      # 각 클라우드/환경별 인프라 IaC
+│       ├── aws/           # AWS 리전별 인프라 (S3, 네트워크, EKS, VPN 등)
+│       │   └── ...tf
+│       ├── oracle/        # Oracle Cloud 리전별 인프라 (Object Storage, 네트워크, OKE, FastConnect 등)
+│       │   └── ...tf
+│       └── onprem/        # 온프레미스 인프라 및 클라우드 연동 설정 (네트워크 장비 설정 등)
+│           └── ...tf
+│   └── k8s/            # 각 Kubernetes 클러스터별 애플리케이션 배포 매니페스트
+│       ├── aws-seoul/     # AWS 서울 리전 클러스터 배포 파일
+│       │   └── ...yaml
+│       ├── onprem/        # 온프레미스 클러스터 배포 파일
+│       │   └── ...yaml
+│       └── oracle-ashburn/ # Oracle Ashburn 리전 클러스터 배포 파일
+│           └── ...yaml
+│   └── monitoring/     # 모니터링/로깅 설정
+│       └── ...
+
 # backend/app/main.py
 
 from fastapi import FastAPI
