@@ -488,3 +488,67 @@ docker-compose down
 볼륨 데이터는 기본적으로 유지되지만, -v 옵션을 추가하면 볼륨 데이터까지 제거합니다 (docker-compose down -v).
 
 이제 백엔드 서비스와 워커 서비스가 컨테이너화되었고, Docker Compose를 사용하여 로컬 개발 환경에서 함께 실행하고 기본적인 통합 테스트를 수행할 수 있습니다. 이는 MVP를 위한 배포 가능한 형태의 기반이 됩니다.
+
+-------------------------------------------------------------------
+--- Final Integrated Performance Testing ---
+
+Okay, let's focus on building the foundation for the final integrated performance testing. This involves three key areas: setting up the performance test environment, defining realistic load scenarios, and ensuring the integrated monitoring system is fully functional.
+
+### 1. 성능 테스트 환경 구축 (Performance Test Environment Setup)
+
+성능 테스트 환경은 **실제 운영 환경을 가장 근접하게 모방**하는 것이 목표입니다. 이는 단순한 기능 테스트 환경보다 더 많은 자원을 요구하며, 하이브리드 멀티 클라우드 아키텍처의 복잡성을 그대로 반영해야 합니다.
+
+**주요 원칙:**
+
+* **IaC 사용:** `infrastructure/terraform/` 코드를 사용하여 인프라를 프로비저닝합니다. 이는 환경 간 일관성을 보장하고 반복 가능한 테스트 환경 구축을 가능하게 합니다.
+* **운영 환경 규모 반영:** 예상되는 **최대 피크 부하**를 처리할 수 있도록 VM 크기, DB 인스턴스 티어, SQS 처리량, 스토리지 용량 등을 운영 환경의 계획에 맞춰 설정합니다.
+* **실제 서비스 사용:** 가능하면 관리형 서비스(RDS, OCI Autonomous DB, SQS, S3/Object Storage 등)를 사용하고, 온프레미스 구성 요소가 있다면 포함시킵니다. Mock 서비스는 특정 시뮬레이션 단계에서 사용되었지만, 최종 성능 테스트에서는 실제 서비스를 대상으로 해야 합니다.
+* **크로스 클라우드 네트워킹:** 클라우드 간, 클라우드와 온프레미스 간의 네트워크 연결(VPN, 전용선) 및 방화벽/보안 그룹 설정이 실제와 동일하게 구성되어야 합니다.
+
+**`infrastructure/terraform/`에서의 설정:**
+
+Terraform 변수(`variables.tf`)를 활용하여 환경별 설정 값을 유연하게 관리합니다. 운영 환경과 성능 테스트 환경은 변수 파일만 바꿔서 동일한 코드로 프로비저닝할 수 있도록 설계합니다.
+
+* **VM/Node 수:** 워커 서비스가 배포될 Kubernetes 클러스터의 Node 수나 VM 수를 피크 부하를 고려하여 설정합니다. (예: `worker_node_count` 변수)
+* **VM 사양:** Node 또는 VM의 CPU, 메모리 사양을 설정합니다. (예: `worker_vm_type` 변수)
+* **DB 인스턴스 크기/티어:** 데이터베이스의 성능 티어 또는 인스턴스 크기를 설정합니다. (예: `db_instance_tier` 변수)
+* **SQS/Storage 설정:** 필요시 SQS 처리량, Storage 서비스의 성능 옵션 등을 설정합니다.
+* **네트워크 구성:** VPC CIDR, 서브넷, 보안 그룹, 라우팅 설정, 크로스 클라우드 연결 설정 등을 정의합니다.
+
+```terraform
+# infrastructure/terraform/aws/variables.tf (예시 - 성능 테스트 환경용 변수)
+
+variable "environment" {
+  description = "The deployment environment (e.g., dev, test, perf, prod)."
+  type        = string
+  default     = "perf" # 성능 테스트 환경
+
+}
+
+# EC2 인스턴스 또는 EKS 노드 그룹 설정
+variable "worker_node_count" {
+  description = "Number of worker nodes/VMs for the performance test environment."
+  type        = number
+  default     = 10 # 예: 성능 테스트를 위해 10대의 워커 노드 사용
+}
+
+variable "worker_vm_type" {
+  description = "EC2 instance type for worker nodes."
+  type        = string
+  default     = "m5.xlarge" # 예: 워커 노드 VM 사양
+
+}
+
+# RDS PostgreSQL 설정
+variable "db_instance_tier" {
+  description = "RDS PostgreSQL instance class (performance tier)."
+  type        = string
+  default     = "db.m5.large" # 예: 성능 테스트 DB 티어
+
+}
+
+# SQS 처리량 설정 (필요시)
+# variable "sqs_throughput_mode" { ... }
+
+# 다른 필요한 변수 (VPC CIDR, 서브넷, S3 버킷 이름, 알림 이메일 등) 정의
+# ...
