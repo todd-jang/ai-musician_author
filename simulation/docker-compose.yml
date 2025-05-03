@@ -90,3 +90,22 @@ volumes:
 # awslocal sqs create-queue --queue-name personal-data-assistant-queue
 # awslocal s3 mb s3://my-local-s3-bucket
 
+# --- Add Mock OpenAI Service ---
+  mock_openai_service:
+    build: # Build a simple image for the mock service
+      context: ./simulation # Context is the simulation directory
+      dockerfile: Dockerfile.mock_openai # Define a Dockerfile for the mock service
+    ports:
+      # Expose the mock service port if you need to access it from outside Docker (e.g., for debugging)
+      # - "8080:8080"
+      pass # No need to expose outside Docker if only worker accesses it
+    environment:
+      # Pass simulation parameters to the mock service
+      SIMULATE_DELAY_SECONDS: ${SIMULATE_DELAY_SECONDS:-0.0}
+      SIMULATE_ERROR_RATE: ${SIMULATE_ERROR_RATE:-0.0}
+      SIMULATE_ERROR_STATUS_CODE: ${SIMULATE_ERROR_STATUS_CODE:-500}
+      SIMULATE_RATE_LIMIT_ENABLED: ${SIMULATE_RATE_LIMIT_ENABLED:-false}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      MOCK_PORT: 8080 # Port the mock FastAPI app runs on
+    # volumes: # Optional: if mock needs config files etc.
+    #   - ./simulation/mock_config.yaml:/app/config.yaml
