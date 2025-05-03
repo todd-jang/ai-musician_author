@@ -73,3 +73,23 @@ docker compose logs -f worker mock_openai_service 명령으로 워커와 Mock �
 이 시뮬레이션의 가치:
 
 이러한 시뮬레이션을 통해 실제 OpenAI API가 느리거나 오류가 발생했을 때 워커가 예상대로 작동하는지, 재시도 로직은 충분한지, 오류가 발생한 작업이 다른 작업의 처리를 방해하지는 않는지 등을 실제 클라우드 환경에 배포하거나 실제 유료 API를 사용하지 않고도 검증할 수 있습니다. Mock 서비스의 매개변수만 변경하면 다양한 시나리오(짧은 지연, 긴 지연, 간헐적 오류, 연속 오류, Rate Limit 등)를 반복적으로 테스트할 수 있습니다.
+
+
+--------------------------------------------------------
+실행 방법:
+
+simulation/ 디렉토리를 만들고 mock_backend.py, Dockerfile.mock_backend, requirements.mock_backend.txt 파일을 생성합니다.
+docker-compose.yml 파일을 업데이트하여 mock_backend 서비스를 추가합니다. API Gateway 테스트 시에는 실제 backend 서비스를 비활성화하거나 트래픽이 가지 않도록 설정하고, mock_backend로 트래픽이 가도록 Gateway 설정을 변경합니다.
+API Gateway 설정(예: Traefik)을 수정하여 /music/upload_sheetmusic 요청이 mock_backend 서비스로 라우팅되도록 합니다.
+Docker Compose를 실행합니다.
+Bash
+
+docker compose up --build -d
+simulate_load.py 스크립트나 다른 HTTP 클라이언트(예: curl)를 사용하여 API Gateway의 외부 엔드포인트(예: http://localhost/music/upload_sheetmusic)로 요청을 보냅니다.
+Bash
+
+# simulate_load.py 실행 예시 (requests=1, concurrency=1)
+python simulate_load.py --requests 1 --concurrency 1 --api-url http://localhost # localhost는 Traefik이 노출하는 포트 가정
+docker compose logs -f mock_backend 명령으로 Mock Backend의 로그를 확인합니다. 요청이 Mock Backend에 정상적으로 도달하고 처리되었음을 나타내는 로그가 찍히는지 확인합니다.
+simulate_load.py 스크립트의 응답 결과를 확인하여 Mock Backend가 반환한 가짜 응답("message": "Request received by mock backend...")이 정상적으로 수신되었는지 확인합니다.
+이 과정은 API Gateway가 구성된 경로로 요청을 올바르게 라우팅하고, 뒤따르는 서비스(여기서는 Mock Backend)가 요청을 받아 응답을 Gateway를 통해 다시 반환하는 통합 흐름을 검증합니다. 백엔드 로직의 실행 시간이나 복잡성에 영향을 받지 않고 Gateway 자체의 연동을 테스트할 수 있습니다.
