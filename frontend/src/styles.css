@@ -1,0 +1,159 @@
+/* frontend/src/App.css or frontend/src/styles.css */
+
+/* Basic styling examples */
+body {
+    font-family: sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f4f4;
+}
+
+.app-container {
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: #fff;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+h1, h2 {
+    color: #333;
+    text-align: center;
+}
+
+.file-uploader {
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px dashed #ccc;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.file-uploader button {
+    padding: 10px 15px;
+    margin: 5px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background-color: #5cb85c;
+    color: white;
+    font-size: 1em;
+}
+
+.file-uploader button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.upload-controls {
+    margin-top: 10px;
+}
+
+.progress-bar-container {
+    width: 80%;
+    margin: 10px auto;
+    background-color: #f0f0f0;
+    border-radius: 5px;
+    overflow: hidden; /* Ensure progress bar stays within container */
+}
+
+.progress-bar {
+    height: 20px;
+    background-color: #0275d8;
+    color: white;
+    text-align: center;
+    line-height: 20px;
+    transition: width 0.3s ease-in-out; /* Smooth transition for progress updates */
+}
+
+.task-list {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+.task-list ul {
+    list-style: none;
+    padding: 0;
+}
+
+.task-item {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.task-item span {
+    margin-right: 10px;
+}
+
+.task-item button {
+     padding: 5px 10px;
+     border: none;
+     border-radius: 4px;
+     cursor: pointer;
+     background-color: #0275d8;
+     color: white;
+}
+
+.task-item.status-completed {
+    border-left: 5px solid #5cb85c; /* Green indicator */
+}
+.task-item.status-failed {
+    border-left: 5px solid #d9534f; /* Red indicator */
+}
+.task-item.status-processing, .task-item.status-queued, .task-item.status-uploading {
+    border-left: 5px solid #f0ad4e; /* Orange indicator */
+}
+
+.task-details-overlay {
+    position: fixed; /* Cover the whole screen */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6); /* Semi-transparent background */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000; /* Ensure it's on top */
+}
+
+.task-details-content {
+    background: #fff;
+    padding: 25px;
+    border-radius: 8px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90%;
+    overflow-y: auto; /* Enable scrolling if content overflows */
+    position: relative; /* For close button positioning */
+}
+
+.task-details-content button {
+    margin-top: 15px;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background-color: #f0ad4e; /* Orange for close */
+    color: white;
+}
+
+/* Style for displaying JSON analysis summary */
+.task-details-content pre {
+    background-color: #eee;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto; /* Enable horizontal scroll for long lines */
+}
+
+/* Optional: Style for music player and translation display components */
+/* .music-player { margin-top: 15px; } */
+/* .translation-display { margin-top: 15px; font-style: italic; } */
