@@ -14,3 +14,21 @@ API Gateway의 외부 URL로 요청을 보냈을 때, 백엔드 서비스가 요
 Gateway에 설정된 다양한 경로와 HTTP 메소드에 대해 테스트합니다.
 Gateway 인증/권한 부여 설정이 유효한 요청은 통과시키고, 유효하지 않은 요청은 차단하거나 오류 응답을 반환하는지 테스트합니다.
 잘못된 형식의 요청이나 존재하지 않는 경로에 대한 Gateway의 오류 응답을 테스트합니다.
+
+설명:
+
+테스트 실행 환경: 이 코드는 실제 배포된 NCP API Gateway의 외부 URL로 요청을 보냅니다. 따라서 테스트 실행 환경(별도의 VM, 컨테이너 또는 로컬 환경)에서 배포된 API Gateway 엔드포인트로 네트워크 접속이 가능해야 합니다.
+픽스처 (pytest.fixture):
+api_gateway_base_url: 테스트 대상 API Gateway의 기본 URL을 환경 변수(API_GATEWAY_BASE_URL)에서 읽어옵니다. 이 환경 변수는 테스트 실행 시 수동 또는 CI/CD 파이프라인에 의해 설정되어야 합니다. URL이 설정되지 않으면 테스트를 건너뜝니다.
+http_client: httpx.Client 인스턴스를 생성하여 실제 HTTP 요청을 보냅니다. base_url이 설정되어 있어 상대 경로로 쉽게 요청을 보낼 수 있습니다. scope="session"을 사용하여 모든 테스트 함수가 동일한 클라이언트 인스턴스를 공유하도록 합니다.
+테스트 함수 (test_...):
+test_upload_sheet_music_via_gateway_success: 악보 파일 업로드 성공 시나리오를 테스트합니다. 가짜 파일 객체(io.BytesIO)와 multipart/form-data 형식으로 요청을 준비하고, http_client.post()를 사용하여 API Gateway의 업로드 엔드포인트로 요청을 보냅니다. 응답 상태 코드(200)와 응답 본문의 구조 및 내용(task_id, status 등)을 검증합니다.
+test_upload_sheet_music_invalid_format: 유효하지 않은 파일 형식으로 업로드 시 API Gateway를 통해 예상된 오류 응답(400 Bad Request)을 받는지 테스트합니다.
+검증 (assert):
+response.status_code == 200: 요청이 성공했는지 확인합니다.
+response.json(): 응답 본문을 JSON으로 파싱합니다.
+assert "key" in response_data: 응답 본문에 특정 키가 포함되어 있는지 확인합니다.
+assert response_data["status"] == "processing_queued": 백엔드가 올바른 상태를 반환했는지 확인합니다.
+이 테스트들은 API Gateway가 클라이언트 요청을 받아 백엔드로 올바르게 전달하고, 백엔드의 응답을 다시 클라이언트에게 전달하는 기본적인 통합 흐름을 검증합니다. Gateway에서 처리하는 라우팅, 인증, 변환 등의 설정이 올바르게 적용되었는지 확인하는 데 중요한 테스트입니다.
+
+API Gateway가 시스템의 "hub"로서 핵심적인 역할을 하므로, 이러한 통합 테스트를 통해 Gateway의 안정적인 동작을 확보하는 것이 중요합니다.
