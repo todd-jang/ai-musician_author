@@ -1,0 +1,14 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install necessary libraries
+# FastAPI, uvicorn, httpx (if mock needs to make http calls itself, unlikely for this mock)
+COPY requirements.mock_backend.txt .
+RUN pip install --no-cache-dir -r requirements.mock_backend.txt
+
+# Copy the mock backend code
+COPY mock_backend.py .
+
+# Command to run the FastAPI application
+CMD ["uvicorn", "mock_backend:app", "--host", "0.0.0.0", "--port", "8001"] # Use MOCK_BACKEND_PORT env var
