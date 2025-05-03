@@ -291,3 +291,256 @@ def test_get_task_status_by_id_not_found(mock_db_pool):
 # Add tests for error cases (e.g., DB connection error, query error)
 # Use mock_db_pool["pool_instance"].getconn.side_effect = Exception("Connection failed")
 # Use mock_db_pool["cursor"].execute.side_effect = Exception("Query failed")
+
+# backend/tests/unit/services/test_db_service.py (Continuing from previous code)
+
+import pytest
+import json
+import uuid
+from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+import os
+import psycopg2.extras # For DictCursor
+
+
+# --- Fixtures (Maintain previous fixtures) ---
+# @pytest.fixture(autouse=True)
+# def set_db_type(): ...
+
+# @pytest.fixture
+# def mock_db_pool(mocker): ...
+
+# @pytest.fixture
+# def mock_json_dumps(mocker): ...
+
+# @pytest.fixture
+# def mock_utcnow(mocker): ...
+
+# --- Unit Tests (Adding tests for save_task_result and get_task_result_details) ---
+
+def test_save_task_result_success(mock_db_pool, mock_json_dumps, mock_utcnow):
+    # Arrange: Define a mock result payload
+    task_id = str(uuid.uuid4())
+    mock_result_payload = {
+        "task_id": task_id,
+        "status": "completed",
+        "processing_time_seconds": 15.5,
+        "error_details": None,
+        "results_summary": {
+            "extract_music_data_status": "success",
+            "generated_music_file": {
+                "status": "success",
+                "s3_key": f"results/{task_id}/output.mp3"
+            },
+            "shakespearean_translation": {
+                 "status": "success",
+                 "translated": "Mocke Shakespearian Text"
+            }
+        },
+        # The completed_at might be added by the worker before calling this function,
+        # or we can expect db_service to set it (using utcnow mock).
+        # Let's assume worker sets it, matching the function signature.
+        "completed_at": mock_utcnow.return_value # Use the mocked time
+    }
+
+    # Arrange: Mock the cursor's execute method. It will be called twice.
+    mock_cursor = mock_db_pool["cursor"]
+    # No specific return value needed for UPDATE/INSERT
+
+    # Arrange: Ensure commit is called
+    mock_conn = mock_db_pool["conn"]
+    mock_conn.commit.return_value = None
+
+    # Act: Call the function
+    success = db_service.save_task_result(mock_result_payload)
+
+    # Assert: Check if execute was called twice with the correct SQL and parameters
+    assert mock_cursor.execute.call_count == 2
+
+    # Check the UPDATE tasks query call
+    update_tasks_query = """
+        UPDATE tasks
+        SET status = %s, completed_at = %s, error_message = %s
+        WHERE task_id = %s
+        """
+    update_tasks_params = (
+        "completed",
+        mock_utcnow.return_value,
+        None,
+        task_id
+    )
+    mock_cursor.execute.assert_any_call(update_tasks_query, update_tasks_params)
+
+    # Check the INSERT INTO task_results ON CONFLICT query call
+    insert_results_query = """
+        INSERT INTO task_results (task_id, final_status, processing_time_seconds, detailed_results, completed_at)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (task_id) DO UPDATE
+        SET final_status = EXCLUDED.final_status,
+            processing_time_seconds = EXCLUDED.processing_time_seconds,
+            detailed_results = EXCLUDED.detailed_results,
+            completed_at = EXCLUDED.completed_at;
+        """
+    insert_results_params = (
+        task_id,
+        "completed",
+        15.5,
+        json.dumps(mock_result_payload["results_summary"]), # Expect JSON string
+        mock_utcnow.return_value
+    )
+    mock_cursor.execute.assert_any_call(insert_results_query, insert_results_params)
+
+    # Check if commit was called
+    mock_conn.commit.assert_called_once()
+    # Check if rollback was NOT called
+    mock_conn.rollback.assert_not_called()
+    # Check if connection was released
+    mock_db_pool["pool_instance"].putconn.assert_called_once_with(mock_conn)
+    # Check if the function returned True
+    assert success is True
+
+
+def test_save_task_result_failure_query(mock_db_pool, mock_json_dumps, mock_utcnow):
+    # Arrange: Define a mock result payload
+    task_id = str(uuid.uuid4())
+    mock_result_payload = {
+        "task_id": task_id,
+        "status": "failed",
+        "processing_time_seconds": 20.1,
+        "error_details": "Simulated error",
+        "results_summary": {"error_step": "OMR"},
+        "completed_at": mock_utcnow.return_value
+    }
+
+    # Arrange: Mock cursor's execute method to raise an exception on the first call
+    mock_cursor = mock_db_pool["cursor"]
+    mock_cursor.execute.side_effect = Exception("Simulated DB query error")
+
+    # Arrange: Ensure rollback is called
+    mock_conn = mock_db_pool["conn"]
+    mock_conn.rollback.return_value = None # rollback doesn't typically return
+
+    # Act: Call the function
+    success = db_service.save_task_result(mock_result_payload)
+
+    # Assert: Check if execute was called at least once
+    mock_cursor.execute.assert_called()
+    # Check if commit was NOT called
+    mock_conn.commit.assert_not_called()
+    # Check if rollback was called
+    mock_conn.rollback.assert_called_once()
+    # Check if connection was released
+    mock_db_pool["pool_instance"].putconn.assert_called_once_with(mock_conn)
+    # Check if the function returned False
+    assert success is False
+
+
+def test_get_task_result_details_found(mock_db_pool):
+    # Arrange: Define test task_id and mock return value for fetchone
+    task_id = str(uuid.uuid4())
+    mock_detailed_results_json = json.dumps({
+        "extract_music_data_status": "success",
+        "generated_music_file": {"status": "success", "s3_key": f"results/{task_id}/audio.mp3"},
+        "shakespearean_translation": {"status": "skipped"}
+    })
+    # Mock DictCursor row format (column names accessible as keys)
+    mock_return_row = {
+        'task_id': task_id,
+        'final_status': 'completed',
+        'processing_time_seconds': 35.2,
+        'detailed_results': mock_detailed_results_json, # JSONB comes as string initially
+        'completed_at': datetime.utcnow()
+    }
+    # Mock fetchone to return the mock row
+    mock_db_pool["cursor"].fetchone.return_value = mock_return_row
+
+    # Mock cursor.description for DictCursor to work (needed for column names)
+    mock_db_pool["cursor"].description = [
+        ('task_id', None, None, None, None, None, None),
+        ('final_status', None, None, None, None, None, None),
+        ('processing_time_seconds', None, None, None, None, None, None),
+        ('detailed_results', None, None, None, None, None, None),
+        ('completed_at', None, None, None, None, None, None),
+    ]
+
+    # Ensure json.loads is handled correctly if DictCursor doesn't parse JSONB automatically
+    # (psycopg2.extras.DictCursor usually parses JSONB, so maybe no extra mock needed if using that)
+    # If not using DictCursor, would need mocker.patch('json.loads', ...)
+
+    # Act: Call the function
+    result_info = db_service.get_task_result_details(task_id)
+
+    # Assert: Check if the correct query was executed
+    mock_db_pool["cursor"].execute.assert_called_once_with(
+        """
+        SELECT task_id, final_status, processing_time_seconds, detailed_results, completed_at
+        FROM task_results
+        WHERE task_id = %s
+        """,
+        (task_id,)
+    )
+    # Check if fetchone was called
+    mock_db_pool["cursor"].fetchone.assert_called_once()
+    # Check if connection was released
+    mock_db_pool["pool_instance"].putconn.assert_called_once_with(mock_db_pool["conn"])
+
+    # Assert: Check the returned dictionary
+    assert result_info is not None
+    assert result_info['task_id'] == task_id
+    assert result_info['final_status'] == 'completed'
+    assert result_info['processing_time_seconds'] == 35.2
+    # Assert that detailed_results is the parsed JSON object, not the string
+    # DictCursor handles this, so the mock return should reflect the parsed result
+    assert result_info['detailed_results'] == json.loads(mock_detailed_results_json)
+    assert isinstance(result_info['detailed_results'], dict)
+
+
+def test_get_task_result_details_not_found(mock_db_pool):
+    # Arrange: Define test task_id and mock fetchone to return None
+    task_id = str(uuid.uuid4())
+    mock_db_pool["cursor"].fetchone.return_value = None
+    # Mock cursor.description (needed even if no rows)
+    mock_db_pool["cursor"].description = []
+
+    # Act: Call the function
+    result_info = db_service.get_task_result_details(task_id)
+
+    # Assert: Check if execute was called
+    mock_db_pool["cursor"].execute.assert_called_once_with(
+        """
+        SELECT task_id, final_status, processing_time_seconds, detailed_results, completed_at
+        FROM task_results
+        WHERE task_id = %s
+        """,
+        (task_id,)
+    )
+    # Check if fetchone was called
+    mock_db_pool["cursor"].fetchone.assert_called_once()
+    # Check if connection was released
+    mock_db_pool["pool_instance"].putconn.assert_called_once_with(mock_db_pool["conn"])
+    # Assert: Check that None was returned
+    assert result_info is None
+
+
+def test_get_task_result_details_failure_query(mock_db_pool):
+    # Arrange: Define test task_id
+    task_id = str(uuid.uuid4())
+
+    # Arrange: Mock cursor's execute method to raise an exception
+    mock_db_pool["cursor"].execute.side_effect = Exception("Simulated DB query error during select")
+
+    # Arrange: Ensure rollback is called (though select usually doesn't need rollback, _execute_query does)
+    mock_conn = mock_db_pool["conn"]
+    mock_conn.rollback.return_value = None
+
+    # Act: Call the function
+    result_info = db_service.get_task_result_details(task_id)
+
+    # Assert: Check if execute was called
+    mock_db_pool["cursor"].execute.assert_called_once()
+    # Check if rollback was called by the helper
+    mock_conn.rollback.assert_called_once()
+    # Check if connection was released
+    mock_db_pool["pool_instance"].putconn.assert_called_once_with(mock_conn)
+    # Assert: Check that None was returned due to the error
+    assert result_info is None
