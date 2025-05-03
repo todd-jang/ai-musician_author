@@ -1,0 +1,91 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # ... traefik (API Gateway) ... # If using Traefik as local gateway
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:80" # Expose backend API port if not using Traefik/another gateway
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PRIMARY_DB_TYPE=${PRIMARY_DB_TYPE:-postgresql}
+      - POSTGRES_DB=${POSTGRES_DB:-mydatabase}
+      - POSTGRES_USER=${POSTGRES_USER:-myuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mypassword}
+      # Use localstack host and port for SQS endpoint
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test # LocalStack default
+      - AWS_SECRET_ACCESS_KEY=test # LocalStack default
+      - AWS_REGION=us-east-1 # LocalStack default
+      - SQS_QUEUE_NAME=${SQS_QUEUE_NAME:-personal-data-assistant-queue} # Define SQS queue name
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-my-local-s3-bucket} # Define S3 bucket name for LocalStack
+      # ... other environment variables for backend ...
+    depends_on:
+      - db
+      - localstack # Backend needs LocalStack for SQS/S3 calls
+
+  worker:
+    build: ./backend
+    command: python -m backend.app.worker # Override default command to run the worker
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PRIMARY_DB_TYPE=${PRIMARY_DB_TYPE:-postgresql}
+      - POSTGRES_DB=${POSTGRES_DB:-mydatabase}
+      - POSTGRES_USER=${POSTGRES_USER:-myuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mypassword}
+      # Use localstack host and port for SQS endpoint
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test # LocalStack default
+      - AWS_SECRET_ACCESS_KEY=test # LocalStack default
+      - AWS_REGION=us-east-1 # LocalStack default
+      - SQS_QUEUE_NAME=${SQS_QUEUE_NAME:-personal-data-assistant-queue}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-my-local-s3-bucket}
+      # ... environment variables for external tools (OMR, FluidSynth, etc.) ...
+      # Note: External tools might need to be installed/available inside the worker container or as separate services
+      - OPENAI_API_KEY=mock_key # Mock or use real key for translation if needed
+      # OMR_TOOL_COMMAND=/path/to/mock/omr_tool.sh # Mock external tools
+      # FLUIDSYNTH_COMMAND=/path/to/mock/fluidsynth.sh
+      # FFMPEG_COMMAND=/path/to/mock/ffmpeg.sh
+    depends_on:
+      - db
+      - localstack # Worker needs LocalStack for SQS/S3 calls
+    # volumes:
+    #   - ./backend/scripts/mock:/app/scripts/mock # Mount mock scripts if needed
+
+  db:
+    # ... your PostgreSQL DB service definition ...
+    image: postgres:14
+    ports:
+      - "5432:5432" # Optional: Expose DB port
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-mydatabase}
+      - POSTGRES_USER=${POSTGRES_USER:-myuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mypassword}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql # Mount init script
+
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566" # Default LocalStack port
+    environment:
+      - SERVICES=sqs,s3 # Only run SQS and S3 services
+      - DEFAULT_REGION=us-east-1
+      # LocalStack Pro features or configuration can be added here
+    volumes:
+      - localstack_data:/var/lib/localstack
+      # LocalStack initialization scripts (optional, for creating SQS queue/S3 bucket on startup)
+      # - ./localstack/init-aws.sh:/etc/localstack/init/aws/init-aws.sh
+
+volumes:
+  db_data:
+  localstack_data:
+
+# Optional: localstack initialization script (localstack/init-aws.sh)
+# #!/bin/bash
+# awslocal sqs create-queue --queue-name personal-data-assistant-queue
+# awslocal s3 mb s3://my-local-s3-bucket
