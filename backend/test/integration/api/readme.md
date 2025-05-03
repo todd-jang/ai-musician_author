@@ -1,3 +1,24 @@
+Plan:
+
+Acknowledge the user's point: Yes, testing the API Gateway, especially if it functions as the main entry point ("hub"), is a critical part of the integration testing phase.
+Explain why the API Gateway needs to be tested in integration:
+Routing: Verify that the API Gateway correctly routes incoming requests to the appropriate backend service endpoint.
+Protocol Translation: If the gateway translates protocols (e.g., HTTP to a backend service over a private network).
+Authentication/Authorization: If the gateway handles API key validation, OAuth, or other authentication methods before forwarding the request.
+Request/Response Transformation: If the gateway modifies request headers/bodies or response headers/bodies.
+Integration with Backend: Verify that the backend service receives the request from the gateway in the expected format and responds correctly back through the gateway.
+Describe what testing the API Gateway involves in integration:
+Sending actual requests to the API Gateway's public endpoint.
+These requests should then flow through the gateway to the backend service.
+Verifying that the backend service receives the request, processes it, and sends a response back through the gateway.
+Checking the final response received from the API Gateway matches the expected response from the backend.
+Testing different API paths and HTTP methods defined in the gateway configuration.
+Testing authentication/authorization mechanisms configured on the gateway.
+Explain where this testing fits: It's part of the broader system integration testing or API testing phase, conducted after the backend service is deployed and reachable by the gateway.
+Mention that this testing would likely be automated using tools that can send HTTP requests (like pytest with httpx or requests, or dedicated API testing tools like Postman/Newman, k6).
+Connect this back to the IaC (Terraform): The test verifies that the API Gateway configuration defined in Terraform (infrastructure/terraform/ncp/api_gateway.tf) is correctly applied and functions as intended.
+This plan confirms the user's intuition about testing the API Gateway and explains its importance and how it would be tested in the integration phase.
+
 API Gateway는 다음과 같은 중요한 역할을 수행하며, 이 기능들이 백엔드 서비스와 제대로 통합되는지 검증하는 것이 통합 테스트의 핵심입니다.
 
 요청 라우팅 (Routing): API Gateway는 들어오는 외부 요청의 URL 경로와 HTTP 메소드 등을 기반으로 어떤 백엔드 서비스의 어떤 엔드포인트로 요청을 전달할지 결정합니다. 이 라우팅 설정이 정확한지 테스트해야 합니다. (예: /music/upload_sheetmusic 경로의 POST 요청이 백엔드 서비스의 /upload_sheetmusic 엔드포인트로 제대로 전달되는지)
