@@ -1,5 +1,0 @@
-fastapi
-uvicorn
-httpx # If the mock service needs to make http calls (e.g., to log to another service)
-pytest # If you want to run tests within the mock service container (unlikely)
-
