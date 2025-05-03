@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+httpx # If the mock service needs to make http calls (e.g., to log to another service)
+pytest #
