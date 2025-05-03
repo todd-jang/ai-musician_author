@@ -89,3 +89,4 @@ volumes:
 # #!/bin/bash
 # awslocal sqs create-queue --queue-name personal-data-assistant-queue
 # awslocal s3 mb s3://my-local-s3-bucket
+
