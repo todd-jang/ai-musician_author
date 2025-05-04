@@ -1,0 +1,4 @@
+selenium #and 
+pytest#, and potentially 
+webdriver-manager#, 
+pytest-selenium.
