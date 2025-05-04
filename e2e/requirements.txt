@@ -1,0 +1,5 @@
+selenium==4.10.0 # Selenium WebDriver 라이브러리 (버전은 필요에 따라 조정)
+pytest==7.4.0    # 테스트 프레임워크 (버전은 필요에 따라 조정)
+webdriver-manager==3.8.6 # 브라우저 드라이버 자동 관리 (편의를 위해 사용)
+pytest-selenium==4.0.0 # pytest와 Selenium 통합 플러그인 (선택 사항이지만 유용)
+# 기타 필요한 라이브러리 (예: 파서, HTTP 클라이언트 등)
